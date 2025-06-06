@@ -128,4 +128,36 @@ button:hover {
     border-radius: 8px;
     font-family: monospace;
     white-space: pre; /* To preserve newlines */
+}
+
+#benchmark-report {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    z-index: 100;
+    padding: 15px;
+    background-color: rgba(0, 0, 0, 0.75);
+    color: white;
+    border-radius: 8px;
+    font-family: monospace;
+    white-space: pre;
+    display: none; /* Initially hidden */
+    max-height: 40vh;
+    overflow-y: auto;
+}
+
+#benchmark-report h3 {
+    margin-top: 0;
+    color: #2196f3;
+}
+
+#benchmark-report table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+#benchmark-report th, #benchmark-report td {
+    padding: 8px;
+    text-align: left;
+    border-bottom: 1px solid #555;
 } 

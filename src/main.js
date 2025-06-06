@@ -18,7 +18,8 @@ const playAnimationButton = document.getElementById('play-animation-button'); //
 const benchmarkControls = document.getElementById('benchmark-controls');
 const characterCountInput = document.getElementById('character-count');
 const instantiateButton = document.getElementById('instantiate-characters-button');
-const gpuBenchmarkDisplay = document.getElementById('gpu-benchmark-display');
+const runSuiteButton = document.getElementById('run-benchmark-suite-button');
+const reportDisplay = document.getElementById('benchmark-report');
 
 // --- Animation File Names (assuming .glb in public/animations/) ---
 const animationFileNames = [
@@ -39,6 +40,24 @@ const stats = {
     frames: 0,
     lastTime: performance.now(),
 };
+
+let benchmarkConfig = {
+    counts: [],
+    duration: 30000
+};
+let isSuiteRunning = false;
+let suiteResults = [];
+let currentRunStats = null;
+
+async function loadBenchmarkConfig() {
+    try {
+        const response = await fetch('/benchmark-config.json');
+        benchmarkConfig = await response.json();
+        console.log('RPM + Three.js Demo: Benchmark config loaded', benchmarkConfig);
+    } catch (error) {
+        console.error('RPM + Three.js Demo: Failed to load benchmark config, using defaults.', error);
+    }
+}
 
 async function loadExternalAnimations() {
     console.log('RPM + Three.js Demo: Loading external GLB animations...');
@@ -349,14 +368,13 @@ function clearInstantiatedAvatars() {
     }
 }
 
-function instantiateCharacters() {
+function instantiateCharacters(count) {
     clearInstantiatedAvatars();
     if (!currentAvatarScene) {
         console.warn('RPM + Three.js Demo: No base avatar to instantiate.');
         return;
     }
 
-    const count = parseInt(characterCountInput.value, 10);
     if (isNaN(count) || count <= 0) {
         console.warn('RPM + Three.js Demo: Invalid character count.');
         return;
@@ -393,9 +411,18 @@ function updateStats() {
 
     const delta = now - stats.lastTime;
     if (delta >= 1000) {
-        stats.fps = Math.round((stats.frames * 1000) / delta);
+        const fps = Math.round((stats.frames * 1000) / delta);
+        stats.fps = fps;
         stats.lastTime = now;
         stats.frames = 0;
+
+        // If a benchmark is running, record stats
+        if (currentRunStats) {
+            currentRunStats.minFps = Math.min(currentRunStats.minFps, fps);
+            currentRunStats.maxFps = Math.max(currentRunStats.maxFps, fps);
+            currentRunStats.totalFps += fps;
+            currentRunStats.frameCount++; // Count how many seconds have passed
+        }
     }
 
     if (renderer) {
@@ -407,8 +434,90 @@ function updateStats() {
     }
 }
 
+async function runBenchmarkSuite() {
+    if (isSuiteRunning) return;
+    isSuiteRunning = true;
+    suiteResults = [];
+    runSuiteButton.disabled = true;
+    instantiateButton.disabled = true;
+    reportDisplay.style.display = 'block';
+    reportDisplay.innerHTML = '<h3>Running Benchmark Suite...</h3>';
+
+    for (const count of benchmarkConfig.counts) {
+        reportDisplay.innerHTML += `<p>Running test for ${count} characters...</p>`;
+        const result = await runSingleBenchmark(count);
+        suiteResults.push(result);
+        reportDisplay.innerHTML += `<p>Done.</p>`;
+    }
+
+    displayBenchmarkReport();
+    isSuiteRunning = false;
+    runSuiteButton.disabled = false;
+    instantiateButton.disabled = false;
+}
+
+function runSingleBenchmark(count) {
+    return new Promise(resolve => {
+        instantiateCharacters(count);
+
+        // Make sure there's an animation to play
+        if (!externalAnimationClips || externalAnimationClips.length === 0) {
+            console.error("No animations loaded for benchmark.");
+            resolve({ count, error: "No animations loaded." });
+            return;
+        }
+        playAnimation(externalAnimationClips[0]);
+
+        currentRunStats = {
+            startTime: performance.now(),
+            frames: 0,
+            totalFps: 0,
+            minFps: Infinity,
+            maxFps: -Infinity,
+            frameCount: 0,
+        };
+
+        setTimeout(() => {
+            const avgFps = Math.round(currentRunStats.totalFps / currentRunStats.frameCount);
+            let memory = 'N/A';
+            if (performance.memory) {
+                memory = `${(performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(2)} MB`;
+            }
+
+            const result = {
+                count,
+                minFps: currentRunStats.minFps,
+                maxFps: currentRunStats.maxFps,
+                avgFps,
+                memory,
+            };
+
+            currentRunStats = null; // Stop recording
+            clearInstantiatedAvatars();
+            resolve(result);
+
+        }, benchmarkConfig.duration);
+    });
+}
+
+function displayBenchmarkReport() {
+    let reportHTML = '<h3>Benchmark Report</h3>';
+    reportHTML += '<table>';
+    reportHTML += '<tr><th>Characters</th><th>Min FPS</th><th>Max FPS</th><th>Avg FPS</th><th>Memory</th></tr>';
+    for (const result of suiteResults) {
+        reportHTML += `<tr><td>${result.count}</td><td>${result.minFps}</td><td>${result.maxFps}</td><td>${result.avgFps}</td><td>${result.memory}</td></tr>`;
+    }
+    reportHTML += '</table>';
+    reportDisplay.innerHTML = reportHTML;
+}
+
 initScene();
 loadExternalAnimations();
+loadBenchmarkConfig();
 createButton.addEventListener('click', openAvatarCreator);
 window.addEventListener('message', subscribe);
-instantiateButton.addEventListener('click', instantiateCharacters); 
+instantiateButton.addEventListener('click', () => {
+    const count = parseInt(characterCountInput.value, 10);
+    instantiateCharacters(count);
+});
+runSuiteButton.addEventListener('click', runBenchmarkSuite); 
