@@ -23,10 +23,12 @@
         <button id="play-animation-button">Play Selected</button>
     </div>
     <div id="benchmark-controls">
-        <label for="character-count">Number of Characters:</label>
-        <input type="number" id="character-count" value="10" min="1" max="100">
-        <button id="instantiate-characters-button">Instantiate Characters</button>
-        <button id="run-benchmark-suite-button">Run Benchmark Suite</button>
+        <div class="control-group">
+            <label for="character-count">Characters:</label>
+            <input type="number" id="character-count" value="10" min="1" max="100">
+        </div>
+        <button id="instantiate-characters-button">Instantiate</button>
+        <button id="run-benchmark-suite-button">Run Suite</button>
     </div>
     <div id="benchmark-report"></div>
     <iframe id="avatar-creator" allow="camera *; microphone *; clipboard-write"></iframe>

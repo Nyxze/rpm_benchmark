@@ -41,10 +41,7 @@ const stats = {
     lastTime: performance.now(),
 };
 
-let benchmarkConfig = {
-    counts: [],
-    duration: 30000
-};
+let benchmarkConfig = [];
 let isSuiteRunning = false;
 let suiteResults = [];
 let currentRunStats = null;
@@ -443,9 +440,19 @@ async function runBenchmarkSuite() {
     reportDisplay.style.display = 'block';
     reportDisplay.innerHTML = '<h3>Running Benchmark Suite...</h3>';
 
-    for (const count of benchmarkConfig.counts) {
-        reportDisplay.innerHTML += `<p>Running test for ${count} characters...</p>`;
-        const result = await runSingleBenchmark(count);
+    for (const benchmark of benchmarkConfig) {
+        reportDisplay.innerHTML += `<p>Running test: ${benchmark.name}...</p>`;
+
+        if (benchmark.CharacterID && benchmark.CharacterID !== 'default') {
+            reportDisplay.innerHTML += `<p>Loading character: ${benchmark.CharacterID}...</p>`;
+            await loadAvatar(benchmark.CharacterID);
+        } else if (!currentAvatarScene) {
+            reportDisplay.innerHTML += `<p style="color: red;">Error: No default character loaded and no CharacterID specified in benchmark "${benchmark.name}". Skipping.</p>`;
+            suiteResults.push({ name: benchmark.name, error: "No character available." });
+            continue; // Skip this test
+        }
+        
+        const result = await runSingleBenchmark(benchmark);
         suiteResults.push(result);
         reportDisplay.innerHTML += `<p>Done.</p>`;
     }
@@ -456,14 +463,14 @@ async function runBenchmarkSuite() {
     instantiateButton.disabled = false;
 }
 
-function runSingleBenchmark(count) {
+function runSingleBenchmark(benchmark) {
     return new Promise(resolve => {
-        instantiateCharacters(count);
+        instantiateCharacters(benchmark.count);
 
         // Make sure there's an animation to play
         if (!externalAnimationClips || externalAnimationClips.length === 0) {
             console.error("No animations loaded for benchmark.");
-            resolve({ count, error: "No animations loaded." });
+            resolve({ name: benchmark.name, error: "No animations loaded." });
             return;
         }
         playAnimation(externalAnimationClips[0]);
@@ -478,14 +485,15 @@ function runSingleBenchmark(count) {
         };
 
         setTimeout(() => {
-            const avgFps = Math.round(currentRunStats.totalFps / currentRunStats.frameCount);
+            const avgFps = currentRunStats.frameCount > 0 ? Math.round(currentRunStats.totalFps / currentRunStats.frameCount) : 0;
             let memory = 'N/A';
             if (performance.memory) {
                 memory = `${(performance.memory.usedJSHeapSize / 1024 / 1024).toFixed(2)} MB`;
             }
 
             const result = {
-                count,
+                name: benchmark.name,
+                count: benchmark.count,
                 minFps: currentRunStats.minFps,
                 maxFps: currentRunStats.maxFps,
                 avgFps,
@@ -496,16 +504,20 @@ function runSingleBenchmark(count) {
             clearInstantiatedAvatars();
             resolve(result);
 
-        }, benchmarkConfig.duration);
+        }, benchmark.duration);
     });
 }
 
 function displayBenchmarkReport() {
     let reportHTML = '<h3>Benchmark Report</h3>';
     reportHTML += '<table>';
-    reportHTML += '<tr><th>Characters</th><th>Min FPS</th><th>Max FPS</th><th>Avg FPS</th><th>Memory</th></tr>';
+    reportHTML += '<tr><th>Test Name</th><th>Characters</th><th>Min FPS</th><th>Max FPS</th><th>Avg FPS</th><th>Memory</th></tr>';
     for (const result of suiteResults) {
-        reportHTML += `<tr><td>${result.count}</td><td>${result.minFps}</td><td>${result.maxFps}</td><td>${result.avgFps}</td><td>${result.memory}</td></tr>`;
+         if(result.error) {
+            reportHTML += `<tr><td>${result.name}</td><td colspan="5" style="color: red;">${result.error}</td></tr>`;
+        } else {
+            reportHTML += `<tr><td>${result.name}</td><td>${result.count}</td><td>${result.minFps}</td><td>${result.maxFps}</td><td>${result.avgFps}</td><td>${result.memory}</td></tr>`;
+        }
     }
     reportHTML += '</table>';
     reportDisplay.innerHTML = reportHTML;

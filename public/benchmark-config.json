@@ -1,4 +1,26 @@
-{
-  "counts": [5, 10, 20, 50],
-  "duration": 30000
-} 
+[
+  {
+    "name": "5 Characters",
+    "duration": 10000,
+    "CharacterID": "default",
+    "count": 50
+  },
+  {
+    "name": "10 Characters",
+    "duration": 10000,
+    "CharacterID": "default",
+    "count": 100
+  },
+  {
+    "name": "20 Characters",
+    "duration": 10000,
+    "CharacterID": "default",
+    "count": 250
+  },
+  {
+    "name": "50 Characters",
+    "duration": 10000,
+    "CharacterID": "default",
+    "count": 500
+  }
+]
