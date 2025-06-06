@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport"
+        content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>Ready Player Me + Three.js Demo</title>
+    <link rel="stylesheet" href="/src/style.css">
+</head>
+
+<body>
+    <div id="container">
+        <h1>Ready Player Me + Three.js Demo</h1>
+        <button id="create-avatar">Create Avatar</button>
+        <div id="loading">Loading avatar...</div>
+    </div>
+    <div id="animation-controls">
+        <label for="animation-select">Choose Animation:</label>
+        <select id="animation-select"></select>
+        <button id="play-animation-button">Play Selected</button>
+    </div>
+    <iframe id="avatar-creator" allow="camera *; microphone *; clipboard-write"></iframe>
+    <div id="scene-container"></div>
+
+    <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>
