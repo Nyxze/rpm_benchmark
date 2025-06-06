@@ -18,6 +18,7 @@ const playAnimationButton = document.getElementById('play-animation-button'); //
 const benchmarkControls = document.getElementById('benchmark-controls');
 const characterCountInput = document.getElementById('character-count');
 const instantiateButton = document.getElementById('instantiate-characters-button');
+const gpuBenchmarkDisplay = document.getElementById('gpu-benchmark-display');
 
 // --- Animation File Names (assuming .glb in public/animations/) ---
 const animationFileNames = [
@@ -32,6 +33,12 @@ let scene, camera, renderer, controls, clock;
 let currentAvatarScene = null;
 let currentAnimationMixer = null;
 let instantiatedAvatars = [];
+
+const stats = {
+    fps: 0,
+    frames: 0,
+    lastTime: performance.now(),
+};
 
 async function loadExternalAnimations() {
     console.log('RPM + Three.js Demo: Loading external GLB animations...');
@@ -199,11 +206,8 @@ function initScene() {
 function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
-    // console.log(`RPM + Three.js Demo: Animate loop delta: ${delta}`); // Optional: enable for detailed delta logging
 
     if (currentAnimationMixer) {
-        // console.log("Updating animation mixer"); // User's existing log, can be helpful
-        console.log("Updating animation mixer");
         currentAnimationMixer.update(delta);
     }
     if (instantiatedAvatars.length > 0) {
@@ -215,6 +219,7 @@ function animate() {
     }
     controls.update();
     renderer.render(scene, camera);
+    updateStats();
 }
 
 function onWindowResize() {
@@ -222,6 +227,8 @@ function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    // Hide original avatar to only show the grid
+    currentAvatarScene.visible = false;
 }
 
 async function loadAvatar(url) {
@@ -375,6 +382,29 @@ function instantiateCharacters() {
     
     // Hide original avatar to only show the grid
     currentAvatarScene.visible = false;
+}
+
+function updateStats() {
+    const statsDiv = document.getElementById('render-stats');
+    if (!statsDiv) return;
+
+    const now = performance.now();
+    stats.frames++;
+
+    const delta = now - stats.lastTime;
+    if (delta >= 1000) {
+        stats.fps = Math.round((stats.frames * 1000) / delta);
+        stats.lastTime = now;
+        stats.frames = 0;
+    }
+
+    if (renderer) {
+        const info = renderer.info.render;
+        statsDiv.textContent =
+            `FPS: ${stats.fps}\n` +
+            `Draw Calls: ${info.calls}\n` +
+            `Triangles: ${info.triangles}`;
+    }
 }
 
 initScene();
