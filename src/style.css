@@ -101,4 +101,19 @@ button:hover {
     background-color: #cccccc;
     color: #666666;
     cursor: not-allowed;
+}
+
+#benchmark-controls {
+    position: absolute;
+    top: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 100;
+    padding: 10px;
+    background-color: rgba(255, 255, 255, 0.85);
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    display: none;
+    align-items: center;
+    gap: 10px;
 } 

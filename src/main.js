@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 // import './style.css'; // CSS is now linked directly in index.html
 
 console.log('RPM + Three.js Demo (External GLB Animations): Script started');
@@ -14,6 +15,9 @@ const createButton = document.getElementById('create-avatar');
 const animationControlsContainer = document.getElementById('animation-controls');
 const animationSelect = document.getElementById('animation-select'); // Get select element
 const playAnimationButton = document.getElementById('play-animation-button'); // Get play button
+const benchmarkControls = document.getElementById('benchmark-controls');
+const characterCountInput = document.getElementById('character-count');
+const instantiateButton = document.getElementById('instantiate-characters-button');
 
 // --- Animation File Names (assuming .glb in public/animations/) ---
 const animationFileNames = [
@@ -27,6 +31,7 @@ let externalAnimationsLoaded = false;
 let scene, camera, renderer, controls, clock;
 let currentAvatarScene = null;
 let currentAnimationMixer = null;
+let instantiatedAvatars = [];
 
 async function loadExternalAnimations() {
     console.log('RPM + Three.js Demo: Loading external GLB animations...');
@@ -67,6 +72,7 @@ function setupAnimationDropdown() {
     }
 
     animationControlsContainer.style.display = 'flex';
+    benchmarkControls.style.display = 'flex';
     animationSelect.innerHTML = '';
     playAnimationButton.disabled = true; // Initially disable play button
 
@@ -134,23 +140,32 @@ function setupAnimationDropdown() {
 }
 
 function playAnimation(clip) {
-    if (!currentAnimationMixer) {
-        console.warn('RPM + Three.js Demo: Animation mixer not available.');
-        return;
-    }
-    console.log(`RPM + Three.js Demo: Playing animation: ${clip.name}, Duration: ${clip.duration}`);
-    if (clip.tracks && clip.tracks.length > 0) {
-        console.log(`RPM + Three.js Demo: First few track names:`);
-        for (let i = 0; i < Math.min(clip.tracks.length, 3); i++) {
-            console.log(`  - ${clip.tracks[i].name}`);
+    if (instantiatedAvatars.length > 0) {
+        instantiatedAvatars.forEach(avatar => {
+            if (avatar.mixer) {
+                avatar.mixer.stopAllAction();
+                const action = avatar.mixer.clipAction(clip);
+                action.reset().play();
+            }
+        });
+        console.log(`RPM + Three.js Demo: Playing animation on ${instantiatedAvatars.length} instantiated avatars.`);
+    } else if (currentAnimationMixer) {
+        console.log(`RPM + Three.js Demo: Playing animation: ${clip.name}, Duration: ${clip.duration}`);
+        if (clip.tracks && clip.tracks.length > 0) {
+            console.log(`RPM + Three.js Demo: First few track names:`);
+            for (let i = 0; i < Math.min(clip.tracks.length, 3); i++) {
+                console.log(`  - ${clip.tracks[i].name}`);
+            }
+        } else {
+            console.warn('RPM + Three.js Demo: Selected clip has no tracks!');
         }
-    } else {
-        console.warn('RPM + Three.js Demo: Selected clip has no tracks!');
-    }
 
-    currentAnimationMixer.stopAllAction();
-    const action = currentAnimationMixer.clipAction(clip);
-    action.reset().play();
+        currentAnimationMixer.stopAllAction();
+        const action = currentAnimationMixer.clipAction(clip);
+        action.reset().play();
+    } else {
+        console.warn('RPM + Three.js Demo: Animation mixer not available.');
+    }
 }
 
 function initScene() {
@@ -191,6 +206,13 @@ function animate() {
         console.log("Updating animation mixer");
         currentAnimationMixer.update(delta);
     }
+    if (instantiatedAvatars.length > 0) {
+        instantiatedAvatars.forEach(avatar => {
+            if (avatar.mixer) {
+                avatar.mixer.update(delta);
+            }
+        });
+    }
     controls.update();
     renderer.render(scene, camera);
 }
@@ -204,6 +226,7 @@ function onWindowResize() {
 
 async function loadAvatar(url) {
     console.log(`RPM + Three.js Demo: Loading avatar GLB from URL: ${url}`);
+    clearInstantiatedAvatars();
     const loader = new GLTFLoader();
     try {
         const gltf = await loader.loadAsync(url);
@@ -214,6 +237,7 @@ async function loadAvatar(url) {
             if (currentAnimationMixer) currentAnimationMixer = null;
         }
         currentAvatarScene = gltf.scene;
+        currentAvatarScene.visible = true; // Ensure new avatar is visible
         console.log('RPM + Three.js Demo: Adding GLTF scene to main scene');
         scene.add(currentAvatarScene);
         currentAnimationMixer = new THREE.AnimationMixer(currentAvatarScene);
@@ -260,45 +284,101 @@ async function loadAvatar(url) {
 }
 
 function openAvatarCreator() {
-    console.log('RPM + Three.js Demo: Opening Ready Player Me iframe');
+    console.log('RPM + Three.js Demo: Opening Ready Player Me avatar creator');
     frame.src = `https://${subdomain}.readyplayer.me/avatar?frameApi`;
     frame.style.display = 'block';
     container.style.display = 'none';
 }
 
 function subscribe(event) {
+    const json = parse(event);
+    if (json?.source !== 'readyplayerme') {
+        return;
+    }
+
+    // Susbribe to all events sent from Ready Player Me since this app is showcasing items url
+    if (json.eventName === 'v1.frame.ready') {
+        frame.contentWindow.postMessage(
+            JSON.stringify({
+                target: 'readyplayerme',
+                type: 'subscribe',
+                eventName: 'v1.**'
+            }),
+            '*'
+        );
+    }
+
+    // Get avatar GLB URL
+    if (json.eventName === 'v1.avatar.exported') {
+        console.log(`RPM + Three.js Demo: Avatar URL received: ${json.data.url}`);
+        frame.style.display = 'none';
+        container.style.display = 'none';
+        sceneContainer.style.display = 'block';
+        if (!scene) initScene();
+        loadAvatar(json.data.url);
+    }
+
+    // Get user id
+    if (json.eventName === 'v1.user.set') {
+        console.log(`RPM + Three.js Demo: User with id ${json.data.id} set`);
+    }
+}
+
+function parse(event) {
     try {
-        let json;
-        if (typeof event.data === 'string') {
-            json = JSON.parse(event.data);
-        } else { return; }
-        if (json?.source !== 'readyplayerme') { return; }
-        console.log('RPM + Three.js Demo: Message received from readyplayerme:', json);
-        if (json.eventName === 'v1.frame.ready') {
-            console.log('RPM + Three.js Demo: iframe is ready. Subscribing to events.');
-            frame.contentWindow.postMessage(JSON.stringify({ target: 'readyplayerme', type: 'subscribe', eventName: 'v1.**' }), '*');
-        }
-        if (json.eventName === 'v1.avatar.exported') {
-            console.log('RPM + Three.js Demo: Avatar exported. URL:', json.data.url);
-            frame.style.display = 'none';
-            loadingText.textContent = 'Loading avatar...';
-            loadingText.style.display = 'block';
-            sceneContainer.style.display = 'none';
-            if (!scene) initScene();
-            loadAvatar(json.data.url);
-        }
-    } catch (error) { return; }
+        return JSON.parse(event.data);
+    } catch (error) {
+        return null;
+    }
 }
 
-// --- Initialization ---
-if (createButton) {
-    createButton.addEventListener('click', openAvatarCreator);
-    console.log('RPM + Three.js Demo: Event listener added to create avatar button');
-} else {
-    console.error('RPM + Three.js Demo: Could not find create avatar button');
+function clearInstantiatedAvatars() {
+    instantiatedAvatars.forEach(avatar => {
+        scene.remove(avatar.model);
+    });
+    instantiatedAvatars = [];
+    if (currentAvatarScene) {
+        currentAvatarScene.visible = true;
+    }
 }
+
+function instantiateCharacters() {
+    clearInstantiatedAvatars();
+    if (!currentAvatarScene) {
+        console.warn('RPM + Three.js Demo: No base avatar to instantiate.');
+        return;
+    }
+
+    const count = parseInt(characterCountInput.value, 10);
+    if (isNaN(count) || count <= 0) {
+        console.warn('RPM + Three.js Demo: Invalid character count.');
+        return;
+    }
+
+    console.log(`RPM + Three.js Demo: Instantiating ${count} characters.`);
+
+    const gridDim = Math.ceil(Math.sqrt(count));
+    const spacing = 2.0; 
+
+    for (let i = 0; i < count; i++) {
+        const model = SkeletonUtils.clone(currentAvatarScene);
+        const mixer = new THREE.AnimationMixer(model);
+
+        const x = (i % gridDim) - (gridDim - 1) / 2;
+        const z = Math.floor(i / gridDim) - (gridDim - 1) / 2;
+
+        model.position.set(x * spacing, 0, z * spacing);
+        
+        scene.add(model);
+        instantiatedAvatars.push({ model, mixer });
+    }
+    
+    // Hide original avatar to only show the grid
+    currentAvatarScene.visible = false;
+}
+
+initScene();
+loadExternalAnimations();
+createButton.addEventListener('click', openAvatarCreator);
 window.addEventListener('message', subscribe);
-console.log('RPM + Three.js Demo: Event listener added for iframe messages');
-
-// Start loading external animations as soon as the script runs
-loadExternalAnimations(); 
+instantiateButton.addEventListener('click', instantiateCharacters); 
